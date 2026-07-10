@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Galería de imágenes · LMTI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --crema:#F7F2EA; --verde:#1F5C54; --verde-deep:#16443E; --cobre:#925E23;
+  --dorado:#C5A059; --texto:#222; --texto-soft:#5C564E; --line:rgba(34,34,34,.14);
+  --serif:'Cormorant Garamond',Georgia,serif; --sans:'DM Sans',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);color:var(--texto);background:var(--crema);line-height:1.6}
+header{background:#fff;border-bottom:1px solid var(--line);padding:26px 24px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+h1{font-family:var(--serif);font-weight:400;font-size:2rem;margin:0}
+h1 small{display:block;font-family:var(--sans);font-size:.62rem;letter-spacing:.28em;text-transform:uppercase;color:var(--cobre);font-weight:700;margin-top:6px}
+.controls{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:22px}
+label{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--texto-soft)}
+select,button{font-family:var(--sans);font-size:.9rem;padding:.6rem .9rem;border:1px solid var(--line);background:#fff;color:var(--texto);border-radius:6px;cursor:pointer}
+button.reload{background:var(--verde);color:#fff;border:none;font-weight:700;letter-spacing:.04em}
+button.reload:hover{background:var(--verde-deep)}
+.hint{font-size:.82rem;color:var(--texto-soft);margin-top:14px}
+.hint code{background:#fff;border:1px solid var(--line);padding:1px 6px;border-radius:4px;font-size:.78rem}
+main{padding:34px 0 80px}
+.status{padding:40px 24px;text-align:center;color:var(--texto-soft)}
+.status.err{color:#a3341f}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.thumb{aspect-ratio:4/3;background:var(--crema);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:contain}
+.card .body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:9px}
+.fname{font-size:.86rem;font-weight:700;color:var(--verde);word-break:break-all}
+.url{font-size:.68rem;color:var(--texto-soft);word-break:break-all;background:var(--crema);border:1px solid var(--line);border-radius:5px;padding:6px 8px;line-height:1.4}
+.copy{background:var(--cobre);color:#fff;border:none;font-weight:700;font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;padding:.55rem;border-radius:6px;cursor:pointer;transition:background .15s}
+.copy:hover{background:#7a4d1c}
+.copy.ok{background:var(--verde)}
+footer{padding:30px 24px;text-align:center;color:var(--texto-soft);font-size:.76rem;border-top:1px solid var(--line)}
+footer a{color:var(--cobre)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap" style="padding:0">
+    <h1>Galería de imágenes<small>LMTI · Links para Tiendup</small></h1>
+    <div class="controls">
+      <label for="folder">Curso / carpeta</label>
+      <select id="folder"></select>
+      <button class="reload" id="reload">↻ Actualizar</button>
+    </div>
+    <p class="hint">Subiste una foto nueva en GitHub y no aparece? Tocá <b>Actualizar</b>. Cada tarjeta tiene un botón <b>Copiar link</b> con la URL lista para pegar en Tiendup.</p>
+  </div>
+</header>
+
+<main>
+  <div class="wrap" style="padding:0">
+    <div id="status" class="status">Cargando…</div>
+    <div id="grid" class="grid"></div>
+  </div>
+</main>
+
+<footer>
+  Repo: <a href="https://github.com/pablodatamonster/brand-assets" target="_blank">pablodatamonster/brand-assets</a> · servido por jsDelivr
+</footer>
+
+<script>
+const REPO = "pablodatamonster/brand-assets";
+const BRANCH = "main";
+const BASE = "lmti/lmti-cursos-img";        // carpeta que contiene las subcarpetas de cada curso
+const IMG_RE = /\.(jpe?g|png|gif|webp|svg|avif)$/i;
+
+const $folder = document.getElementById("folder");
+const $grid = document.getElementById("grid");
+const $status = document.getElementById("status");
+
+const apiUrl = p => `https://api.github.com/repos/${REPO}/contents/${p}?ref=${BRANCH}`;
+const cdnUrl = p => `https://cdn.jsdelivr.net/gh/${REPO}@${BRANCH}/${p}`;
+
+async function ghList(path){
+  const r = await fetch(apiUrl(path), {headers:{Accept:"application/vnd.github+json"}});
+  if(!r.ok){
+    if(r.status === 403) throw new Error("GitHub limitó las consultas por un rato (máx. 60 por hora). Esperá unos minutos y tocá Actualizar.");
+    throw new Error("No se pudo leer la carpeta ("+r.status+").");
+  }
+  return r.json();
+}
+
+async function loadFolders(){
+  const items = await ghList(BASE);
+  const dirs = items.filter(i => i.type === "dir").map(i => i.name).sort();
+  $folder.innerHTML = "";
+  (dirs.length ? dirs : []).forEach(d => {
+    const o = document.createElement("option");
+    o.value = d; o.textContent = d;
+    $folder.appendChild(o);
+  });
+  return dirs;
+}
+
+async function loadImages(folder){
+  $grid.innerHTML = "";
+  $status.className = "status";
+  $status.textContent = "Cargando imágenes…";
+  const items = await ghList(`${BASE}/${folder}`);
+  const imgs = items.filter(i => i.type === "file" && IMG_RE.test(i.name))
+                    .sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+  if(!imgs.length){ $status.textContent = "No hay imágenes en esta carpeta todavía."; return; }
+  $status.textContent = "";
+  imgs.forEach(f => {
+    const url = cdnUrl(`${BASE}/${folder}/${f.name}`);
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="thumb"><img loading="lazy" src="${url}" alt="${f.name}"></div>
+      <div class="body">
+        <div class="fname">${f.name}</div>
+        <div class="url">${url}</div>
+        <button class="copy" type="button">Copiar link</button>
+      </div>`;
+    const btn = card.querySelector(".copy");
+    btn.addEventListener("click", () => copy(url, btn));
+    $grid.appendChild(card);
+  });
+}
+
+function copy(text, btn){
+  const done = () => { btn.textContent = "✓ Copiado"; btn.classList.add("ok");
+    setTimeout(() => { btn.textContent = "Copiar link"; btn.classList.remove("ok"); }, 1500); };
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(text).then(done).catch(() => fallback(text, done));
+  } else { fallback(text, done); }
+}
+function fallback(text, done){
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch(e){ prompt("Copiá el link:", text); }
+  document.body.removeChild(ta);
+}
+
+async function init(){
+  try {
+    const dirs = await loadFolders();
+    if(!dirs.length){ $status.className="status err"; $status.textContent="No se encontraron carpetas de curso."; return; }
+    await loadImages($folder.value);
+  } catch(e){
+    $status.className = "status err";
+    $status.textContent = e.message;
+  }
+}
+$folder.addEventListener("change", () => loadImages($folder.value).catch(e => {
+  $status.className="status err"; $status.textContent=e.message;
+}));
+document.getElementById("reload").addEventListener("click", init);
+init();
+</script>
+</body>
+</html>
