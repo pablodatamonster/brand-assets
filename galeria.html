@@ -112,7 +112,7 @@ async function loadImages(folder){
   if(!imgs.length){ $status.textContent = "No hay imágenes en esta carpeta todavía."; return; }
   $status.textContent = "";
   imgs.forEach(f => {
-    const url = cdnUrl(`${BASE}/${folder}/${f.name}`);
+    const url = cdnUrl(`${BASE}/${folder}/${encodeURIComponent(f.name)}`);
     const card = document.createElement("div");
     card.className = "card";
     card.innerHTML = `
