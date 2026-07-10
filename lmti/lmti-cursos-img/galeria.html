@@ -21,9 +21,12 @@ h1{font-family:var(--serif);font-weight:400;font-size:2rem;margin:0}
 h1 small{display:block;font-family:var(--sans);font-size:.62rem;letter-spacing:.28em;text-transform:uppercase;color:var(--cobre);font-weight:700;margin-top:6px}
 .controls{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:22px}
 label{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--texto-soft)}
-select,button{font-family:var(--sans);font-size:.9rem;padding:.6rem .9rem;border:1px solid var(--line);background:#fff;color:var(--texto);border-radius:6px;cursor:pointer}
+select,button,input{font-family:var(--sans);font-size:.9rem;padding:.6rem .9rem;border:1px solid var(--line);background:#fff;color:var(--texto);border-radius:6px;cursor:pointer}
+input#custom{width:120px;cursor:text}
 button.reload{background:var(--verde);color:#fff;border:none;font-weight:700;letter-spacing:.04em}
 button.reload:hover{background:var(--verde-deep)}
+.sep{width:1px;height:34px;background:var(--line)}
+.dims{font-size:.68rem;color:var(--texto-soft);letter-spacing:.04em}
 .hint{font-size:.82rem;color:var(--texto-soft);margin-top:14px}
 .hint code{background:#fff;border:1px solid var(--line);padding:1px 6px;border-radius:4px;font-size:.78rem}
 main{padding:34px 0 80px}
@@ -51,9 +54,21 @@ footer a{color:var(--cobre)}
     <div class="controls">
       <label for="folder">Curso / carpeta</label>
       <select id="folder"></select>
+      <div class="sep"></div>
+      <label for="size">Ancho de la imagen</label>
+      <select id="size">
+        <option value="0">Original (sin achicar)</option>
+        <option value="100">100 px · ícono / favicon</option>
+        <option value="200">200 px · chica</option>
+        <option value="400">400 px · mediana</option>
+        <option value="600" selected>600 px · foto en la clase</option>
+        <option value="900">900 px · grande</option>
+        <option value="custom">Personalizado…</option>
+      </select>
+      <input id="custom" type="number" min="10" max="3000" step="10" placeholder="px" hidden>
       <button class="reload" id="reload">↻ Actualizar</button>
     </div>
-    <p class="hint">Subiste una foto nueva en GitHub y no aparece? Tocá <b>Actualizar</b>. Cada tarjeta tiene un botón <b>Copiar link</b> con la URL lista para pegar en Tiendup.</p>
+    <p class="hint">Elegí el <b>ancho</b> y tocá <b>Copiar link</b>: la imagen se achica sola al pegarla (el archivo original queda intacto). Si subiste una foto nueva y no aparece, tocá <b>Actualizar</b>.</p>
   </div>
 </header>
 
@@ -65,7 +80,7 @@ footer a{color:var(--cobre)}
 </main>
 
 <footer>
-  Repo: <a href="https://github.com/pablodatamonster/brand-assets" target="_blank">pablodatamonster/brand-assets</a> · servido por jsDelivr
+  Repo: <a href="https://github.com/pablodatamonster/brand-assets" target="_blank">pablodatamonster/brand-assets</a> · imágenes por jsDelivr · redimensionado por wsrv.nl
 </footer>
 
 <script>
@@ -77,9 +92,36 @@ const IMG_RE = /\.(jpe?g|png|gif|webp|svg|avif)$/i;
 const $folder = document.getElementById("folder");
 const $grid = document.getElementById("grid");
 const $status = document.getElementById("status");
+const $size = document.getElementById("size");
+const $custom = document.getElementById("custom");
 
 const apiUrl = p => `https://api.github.com/repos/${REPO}/contents/${p}?ref=${BRANCH}`;
 const cdnUrl = p => `https://cdn.jsdelivr.net/gh/${REPO}@${BRANCH}/${p}`;
+
+// Ancho elegido, en px. 0 = original.
+function currentWidth(){
+  if($size.value === "custom"){
+    const n = parseInt($custom.value, 10);
+    return (Number.isFinite(n) && n > 0) ? n : 0;
+  }
+  return parseInt($size.value, 10) || 0;
+}
+
+// wsrv.nl redimensiona al vuelo desde la URL; el archivo del repo no se toca.
+// Sin ancho, devolvemos el link directo de jsDelivr (más simple y rápido).
+function linkFor(rawUrl, width){
+  if(!width) return rawUrl;
+  return `https://wsrv.nl/?url=${encodeURIComponent(rawUrl)}&w=${width}`;
+}
+
+// Reescribe los links visibles cuando cambia el ancho, sin volver a pedir la lista.
+function refreshLinks(){
+  const w = currentWidth();
+  document.querySelectorAll(".card").forEach(card => {
+    const raw = card.dataset.raw;
+    card.querySelector(".url").textContent = linkFor(raw, w);
+  });
+}
 
 async function ghList(path){
   const r = await fetch(apiUrl(path), {headers:{Accept:"application/vnd.github+json"}});
@@ -112,18 +154,20 @@ async function loadImages(folder){
   if(!imgs.length){ $status.textContent = "No hay imágenes en esta carpeta todavía."; return; }
   $status.textContent = "";
   imgs.forEach(f => {
-    const url = cdnUrl(`${BASE}/${folder}/${encodeURIComponent(f.name)}`);
+    const raw = cdnUrl(`${BASE}/${folder}/${encodeURIComponent(f.name)}`);
     const card = document.createElement("div");
     card.className = "card";
+    card.dataset.raw = raw;
     card.innerHTML = `
-      <div class="thumb"><img loading="lazy" src="${url}" alt="${f.name}"></div>
+      <div class="thumb"><img loading="lazy" src="${linkFor(raw, 400)}" alt="${f.name}"></div>
       <div class="body">
         <div class="fname">${f.name}</div>
-        <div class="url">${url}</div>
+        <div class="url">${linkFor(raw, currentWidth())}</div>
         <button class="copy" type="button">Copiar link</button>
       </div>`;
     const btn = card.querySelector(".copy");
-    btn.addEventListener("click", () => copy(url, btn));
+    // Lee el link en el momento del click, así respeta el ancho elegido.
+    btn.addEventListener("click", () => copy(card.querySelector(".url").textContent, btn));
     $grid.appendChild(card);
   });
 }
@@ -156,6 +200,13 @@ async function init(){
 $folder.addEventListener("change", () => loadImages($folder.value).catch(e => {
   $status.className="status err"; $status.textContent=e.message;
 }));
+$size.addEventListener("change", () => {
+  const custom = $size.value === "custom";
+  $custom.hidden = !custom;
+  if(custom) $custom.focus();
+  refreshLinks();
+});
+$custom.addEventListener("input", refreshLinks);
 document.getElementById("reload").addEventListener("click", init);
 init();
 </script>
